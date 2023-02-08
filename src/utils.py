@@ -22,8 +22,7 @@ class Heap():
         return len(self.heap)
     def __getitem__(self, key):
         return self.heap[key]
-    # def __setitem__(self, key, value):
-    #     self.heap[key] = value
+
     def add(self, docid, score):
         self.heap.append(Heap_element(docid, score))
         self.heapify_up(len(self.heap)-1)
@@ -58,11 +57,7 @@ class Heap():
         return self.heap[0]
     def empty(self):
         return len(self.heap) == 0
-    def get_best_k(self, k):
-        best_k = []
-        for i in range(k):
-            best_k.append(self.pop())
-        return best_k
+    
     def contains(self, docid):
         for element in self.heap:
             if element.docid == docid:
@@ -75,4 +70,16 @@ class Heap():
                 self.heapify_up(self.heap.index(element))
                 return
         self.add(docid, score)
+    
+    def get_top_k(self, k):
+        """get top k elements from heap"""
+        heap = Heap()
+        for i in range(k):
+            element = self.pop()
+            if element is None:
+                break
+            heap.add(element.docid, element.score)
+        return heap
+    
+    
         

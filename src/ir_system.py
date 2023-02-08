@@ -58,7 +58,45 @@ class IRSystem():
               vectors[docid] = vectors[docid]/np.linalg.norm(vectors[docid])
         return vectors
     
+    def get_doc_vector_from_query2(self, query):
+        vectors = {}
+        query_vector = np.zeros(len(self.index))
+        heap = Heap()
+        for term in query:
+            if term in self.index:
+                query_vector[self.index[term].position()] = 1
+                norm = np.linalg.norm(query_vector)
+                if norm > 0:
+                    query_vector = query_vector/np.linalg.norm(query_vector)
+                for docid, _ in self.index[term]:
+                    if docid in vectors:
+                        vectors[docid][self.index[term].position()] = self.index.tf_idf(term, docid, self.N)
+                    else:
+                        vectors[docid] = np.zeros(len(self.index))
+                        vectors[docid][self.index[term].position()] = self.index.tf_idf(term, docid, self.N)
 
+                    norm = np.linalg.norm(vectors[docid])
+                    if norm > 0:
+                        vectors[docid] = vectors[docid]/np.linalg.norm(vectors[docid])
+                    score = np.dot(vectors[docid], query_vector)
+                    heap.update(docid, score)
+       
+        return vectors, heap
+    
+                        
+
+    def cosine_similiarity(self, query_vector, doc_vector):
+        return np.dot(query_vector, doc_vector)
+    
+    
+    def get_top_k(self, query, k):
+        query_vector = self.get_query_vector(query)
+        doc_vectors = self.get_doc_vectors()
+        heap = Heap()
+        for docid, doc_vector in enumerate(doc_vectors):
+            heap.add(self.cosine_similiarity(query_vector, doc_vector), docid)
+        return heap
+    
 
 class Posting_list():
     def __init__(self, position):
@@ -99,8 +137,12 @@ class Posting_list():
     
     def get_post(self, docid):
         index = self.find_posting_index(docid)
-        return self._postings[index]
-    
+        if index is not None:
+            return self._postings[index]
+        else:
+            return None
+  
+
 
 class Index():
     def __init__(self, corpus):
@@ -111,10 +153,8 @@ class Index():
         return str(self._terms)
     
     def __getitem__(self, term):
-        try:
             return self._terms[term]
-        except KeyError:
-            return None
+
 
     def __contains__(self, term):
         try:
@@ -126,6 +166,9 @@ class Index():
     def __len__(self):
         return len(self._terms)
     
+    def __iter__(self):
+        return iter(self._terms)
+    
 
     def df(self, term):
         return self._terms[term]._df
@@ -134,8 +177,11 @@ class Index():
         return math.log10(N/self.df(term))
     
     def tf(self, term, docid):
-        _, tf = self._terms[term].get_post(docid)
-        return tf
+        post = self._terms[term].get_post(docid)
+        if post is not None:
+            return post[1]
+        else:
+            return 0
     
     def tf_idf(self, term, docid, N):
         return self.tf(term, docid)*self.idf(term, N)

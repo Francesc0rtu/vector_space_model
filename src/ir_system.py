@@ -5,17 +5,35 @@ from src.utils import Heap, preprocess_row
 from src.dataloader import Dataset
 from tqdm import tqdm
 import numpy as np
+import pickle
+import os
 
 
 
 class IRSystem():
     
-    def __init__(self, dataset="TIME"):
-        if dataset == "TIME":
-            self.corpus = Dataset('DATA/TIME.ALL', 'DATA/TIME.QUE')['corpus']
-            self.query = Dataset('DATA/TIME.ALL', 'DATA/TIME.QUE')['query']
-        self.index = Index(self.corpus)
-        self.N = len(self.corpus)
+    def __init__(self, dataset="time", load=False):
+        if load:  # load model 
+            if dataset == "time":
+                path = "MODEL/TIME"
+                if os.path.exists(path):
+                    self.index = pickle.load(open(path + "/index.pkl", "rb"))
+                    self.corpus = pickle.load(open(path + "/corpus.pkl", "rb"))
+                    self.query = pickle.load(open(path + "/query.pkl", "rb"))
+                    self.N = len(self.corpus)
+                else:
+                    raise FileNotFoundError("No model found")
+        else:    # create model
+            if dataset == "time":
+                path = "DATA/time"
+                self.dataset = Dataset(path= path + "/TIME.ALL", path_query=path + '/TIME.QUE')
+                self.corpus = self.dataset['corpus']
+                self.query = self.dataset['query']
+
+            
+            self.index = Index(self.corpus) # create index
+            self.index.remove_stopwords() # remove stopwords
+            self.N = len(self.corpus)
 
     def __getitem__(self, key):
         if key == 'index':
@@ -86,16 +104,15 @@ class IRSystem():
        
         return vectors, heap
     
+                        
+    def cosine_similiarity(self, query_vector, doc_vector):
+        return np.dot(query_vector, doc_vector)
+    
     def search(self, query, k=10):
         """ This function return the top k documents of a query
         """
         vectors, heap = self.get_docs_from_query(query)
         return heap.get_top_k(k)
-                        
-
-    def cosine_similiarity(self, query_vector, doc_vector):
-        return np.dot(query_vector, doc_vector)
-    
     
     def get_top_k(self, query, k):
         query_vector = self.get_query_vector(query)
@@ -105,7 +122,6 @@ class IRSystem():
             heap.add(self.cosine_similiarity(query_vector, doc_vector), docid)
         return heap
     
-
 
 
 class Posting_list():
@@ -199,7 +215,7 @@ class Index():
         
     def make_index(self, corpus):
         position = 0
-        for docid, doc in tqdm(enumerate(corpus), total=len(corpus)):
+        for docid, doc in tqdm(enumerate(corpus), total=len(corpus), desc="Indexing:"):
             for term in doc:
                 try:
                     self._terms[term].add_posting(docid)

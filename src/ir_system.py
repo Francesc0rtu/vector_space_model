@@ -2,6 +2,7 @@ import re
 from collections import defaultdict, OrderedDict
 import math
 from src.utils import Heap, preprocess_row
+from src.dataloader import Dataset
 from tqdm import tqdm
 import numpy as np
 
@@ -9,16 +10,26 @@ import numpy as np
 
 class IRSystem():
     
-    def __init__(self, dataset):
-        self.corpus = dataset()
+    def __init__(self, dataset="TIME"):
+        if dataset == "TIME":
+            self.corpus = Dataset('DATA/TIME.ALL', 'DATA/TIME.QUE')['corpus']
+            self.query = Dataset('DATA/TIME.ALL', 'DATA/TIME.QUE')['query']
         self.index = Index(self.corpus)
         self.N = len(self.corpus)
 
-    def search(self, query):
-        """This function return the top 10 documents of a query"""
-        query_vector = self.get_query_vector(query)
+    def __getitem__(self, key):
+        if key == 'index':
+            return self.index
+        elif key == 'corpus':
+            return self.corpus
+        elif key == 'query':
+            return self.query
+        else:
+            raise KeyError
 
     def get_query_vector(self, query):
+        """This function return the vector of a query"""
+        query = preprocess_row(query)
         query_vector = np.zeros(len(self.index))
         for term in query:
             if term in self.index:
@@ -29,12 +40,15 @@ class IRSystem():
         return query_vector
     
     def get_doc_vectors(self):
+        """ This function return the vector of each document"""
         doc_vectors = []
         for docid in range(self.N):
             doc_vectors.append(self.get_doc_vector(docid))
         return doc_vectors
 
     def get_doc_vector(self, docid):
+        """This function return the vector of a document"""
+
         doc_vector = np.zeros(len(self.index))
         for term in self.corpus[docid]:
             if term in self.index:
@@ -42,24 +56,11 @@ class IRSystem():
         # normalize
         doc_vector = doc_vector/np.linalg.norm(doc_vector)            
         return doc_vector
-   
-    def get_doc_vector_from_query(self, query):
-        vectors = {}
-        for term in query:
-            if term in self.index:
-                for docid, _ in self.index[term]:
-                    if docid in vectors:
-                        vectors[docid][self.index[term].position()] = self.index.tf_idf(term, docid, self.N)
-                    else:
-                        vectors[docid] = np.zeros(len(self.index))
-                        vectors[docid][self.index[term].position()] = self.index.tf_idf(term, docid, self.N)
-        # normalize
-        for docid in vectors:
-            if np.linalg.norm(vectors[docid]) > 0:
-              vectors[docid] = vectors[docid]/np.linalg.norm(vectors[docid])
-        return vectors
+
     
-    def get_doc_vector_from_query2(self, query):
+    def get_docs_from_query(self, query):
+        """ This function compute the vector of each document and the query vector symultaneously while iterating over the posting lists,
+        then compute the cosine similarity and return the heap of the top documents"""
         query = preprocess_row(query)
         vectors = {}
         query_vector = np.zeros(len(self.index))
@@ -85,6 +86,11 @@ class IRSystem():
        
         return vectors, heap
     
+    def search(self, query, k=10):
+        """ This function return the top k documents of a query
+        """
+        vectors, heap = self.get_docs_from_query(query)
+        return heap.get_top_k(k)
                         
 
     def cosine_similiarity(self, query_vector, doc_vector):
@@ -99,6 +105,8 @@ class IRSystem():
             heap.add(self.cosine_similiarity(query_vector, doc_vector), docid)
         return heap
     
+
+
 
 class Posting_list():
     def __init__(self, position):
@@ -150,6 +158,7 @@ class Index():
     def __init__(self, corpus):
         self._terms = OrderedDict()
         self.make_index(corpus)
+        self.number_of_documents = len(corpus)
     
     def __repr__(self):
         return str(self._terms)
@@ -175,8 +184,8 @@ class Index():
     def df(self, term):
         return self._terms[term]._df
     
-    def idf(self, term, N):
-        return math.log10(N/self.df(term))
+    def idf(self, term):
+        return math.log10(self.number_of_documents/self.df(term))
     
     def tf(self, term, docid):
         post = self._terms[term].get_post(docid)
@@ -186,7 +195,7 @@ class Index():
             return 0
     
     def tf_idf(self, term, docid, N):
-        return self.tf(term, docid)*self.idf(term, N)
+        return self.tf(term, docid)*self.idf(term)
         
     def make_index(self, corpus):
         position = 0
@@ -199,5 +208,11 @@ class Index():
                     position += 1
                     self._terms[term].add_posting(docid)
     
+    def remove_stopwords(self, percentage = 0.05):
+        """ This function remove the terms that appear in more than percentage of the documents
+        """
+        for term in list(self._terms):
+            if self.df(term) > percentage*self.number_of_documents:
+                del self._terms[term]
 
  

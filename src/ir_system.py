@@ -1,9 +1,10 @@
 import re
 from collections import defaultdict, OrderedDict
 import math
-from src.utils import Heap
+from src.utils import Heap, preprocess_row
 from tqdm import tqdm
 import numpy as np
+
 
 
 class IRSystem():
@@ -59,6 +60,7 @@ class IRSystem():
         return vectors
     
     def get_doc_vector_from_query2(self, query):
+        query = preprocess_row(query)
         vectors = {}
         query_vector = np.zeros(len(self.index))
         heap = Heap()

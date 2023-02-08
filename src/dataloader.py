@@ -1,6 +1,6 @@
 import re
 from collections import defaultdict
-
+from src.utils import preprocess_row
 
 class Dataset():
     def __init__(self, path='DATA/TIME.ALL', path_query='DATA/TIME.QUE'):
@@ -11,6 +11,20 @@ class Dataset():
     def __call__(self):
         return self.corpus
     
+    # def load(self, path):
+    #     articles = []
+    #     with open(path, 'r') as f:
+    #         tmp = []
+    #         for row in f:
+    #             if row.startswith("*TEXT"):
+    #                 if tmp != []:
+    #                     articles.append(tmp)
+    #                 tmp = []
+    #             else:
+    #                 row = re.sub(r'[^a-zA-Z\s]+', '', row)
+    #                 tmp += row.split()
+    #     return articles
+
     def load(self, path):
         articles = []
         with open(path, 'r') as f:
@@ -21,6 +35,5 @@ class Dataset():
                         articles.append(tmp)
                     tmp = []
                 else:
-                    row = re.sub(r'[^a-zA-Z\s]+', '', row)
-                    tmp += row.split()
+                    tmp += preprocess_row(row)
         return articles

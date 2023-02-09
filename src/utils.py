@@ -12,6 +12,13 @@ class Heap_element():
         return self.score == other.score
     def __repr__(self):
         return "docid:"+ str(self.docid) + " score:" + str(self.score)
+    def __getitem__(self, key):
+        if key == "docid":
+            return self.docid
+        elif key == "score":
+            return self.score
+        else:
+            raise KeyError
 
 class Heap():
     def __init__(self):
@@ -92,10 +99,20 @@ class Heap():
     
     def get_top_k(self, k):
         """get top k elements from heap"""
-        heap = Heap()
-        for element in self.heap[0:k]:
-            heap.add(element.docid, element.score)
-        return heap
+        return self.heap[0:k]
+    
+    def verify_heap_proprerty(self):
+        """verify heap property"""
+        for i in range(len(self.heap)):
+            left = 2*i+1
+            right = 2*i+2
+            if left < len(self.heap) and self.heap[left] > self.heap[i]:
+                print("left child is greater than parent")
+                return False
+            if right < len(self.heap) and self.heap[right] > self.heap[i]:
+                print("right child is greater than parent")
+                return False
+        return True
     
 
 def preprocess_query(query):

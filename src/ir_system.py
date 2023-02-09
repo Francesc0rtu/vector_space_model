@@ -15,7 +15,7 @@ class IRSystem():
     def __init__(self, dataset="time", load=False):
         if load:  # load model 
             if dataset == "time":
-                path = "MODEL/TIME"
+                path = "MODEL/time"
                 if os.path.exists(path):
                     self.index = pickle.load(open(path + "/index.pkl", "rb"))
                     self.corpus = pickle.load(open(path + "/corpus.pkl", "rb"))
@@ -25,8 +25,7 @@ class IRSystem():
                     raise FileNotFoundError("No model found")
         else:    # create model
             if dataset == "time":
-                path = "DATA/time"
-                self.dataset = Dataset(path= path + "/TIME.ALL", path_query=path + '/TIME.QUE')
+                self.dataset = Dataset(dataset = "time")
                 self.corpus = self.dataset['corpus']
                 self.query = self.dataset['query']
 
@@ -76,20 +75,32 @@ class IRSystem():
         return doc_vector
 
     
-    def get_docs_from_query(self, query):
+    def get_docs_from_query(self, query, champions=False):
         """ This function compute the vector of each document and the query vector symultaneously while iterating over the posting lists,
         then compute the cosine similarity and return the heap of the top documents"""
-        query = preprocess_row(query)
+        if type(query) == str:
+            query = preprocess_row(query)
+        elif type(query) != list:
+            raise TypeError("query must be a list or a string")
+
         vectors = {}
         query_vector = np.zeros(len(self.index))
         heap = Heap()
         for term in query:
             if term in self.index:
+                print(term)
                 query_vector[self.index[term].position()] = 1
                 norm = np.linalg.norm(query_vector)
                 if norm > 0:
                     query_vector = query_vector/np.linalg.norm(query_vector)
+                
+                champ_iter = 0
                 for docid, _ in self.index[term]:
+                    
+                    if champ_iter > (self.N/2) and champions == True:
+                        break
+                    champ_iter += 1
+
                     if docid in vectors:
                         vectors[docid][self.index[term].position()] = self.index.tf_idf(term, docid, self.N)
                     else:
@@ -101,6 +112,8 @@ class IRSystem():
                         vectors[docid] = vectors[docid]/np.linalg.norm(vectors[docid])
                     score = np.dot(vectors[docid], query_vector)
                     heap.update(docid, score)
+            elif term not in self.index:
+                print("The term {} is not in the index".format(term))
        
         return vectors, heap
     
@@ -112,15 +125,19 @@ class IRSystem():
         """ This function return the top k documents of a query
         """
         vectors, heap = self.get_docs_from_query(query)
-        return heap.get_top_k(k)
+        if k==None:
+            return heap
+        else:
+            return heap.get_top_k(k)
     
-    def get_top_k(self, query, k):
-        query_vector = self.get_query_vector(query)
-        doc_vectors = self.get_doc_vectors()
-        heap = Heap()
-        for docid, doc_vector in enumerate(doc_vectors):
-            heap.add(self.cosine_similiarity(query_vector, doc_vector), docid)
-        return heap
+    def get_document_from_list(self, heap):
+        """ This function return the document from a list of heap-elements"""
+        documents = []
+        for heap_el in heap:
+            
+            documents.append(self.corpus[heap_el["docid"]])
+        
+        return documents
     
 
 
@@ -135,6 +152,7 @@ class Posting_list():
 
     def __iter__(self):
         return iter(self._postings)
+    
 
     def add_posting(self, docid):
         index = self.find_posting_index(docid)

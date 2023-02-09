@@ -3,12 +3,19 @@ from collections import defaultdict
 from src.utils import preprocess_row
 
 class Dataset():
-    def __init__(self, path='DATA/TIME.ALL', path_query='DATA/TIME.QUE'):
-        self.corpus = self.load(path)
-        if path_query != None:
-            self.query = self.load(path_query)
-        else:
-            self.query = "No query"
+    def __init__(self, dataset="time", path_query=None):
+
+        if dataset == "time":
+            path='DATA/time/TIME.ALL'
+            path_query='DATA/time/TIME.QUE'
+            self.corpus = self.load(path)
+            if path_query != None:
+                self.query = self.load(path_query)
+            else:
+                self.query = "No query"
+
+        #if dataset == "wikipedia":
+            
 
     def __getitem__(self, key):
         if key == 'corpus':
@@ -17,6 +24,8 @@ class Dataset():
             return self.query
         else:
             raise KeyError
+        
+    
 
 
 

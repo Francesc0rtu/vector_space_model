@@ -42,16 +42,16 @@ class Dataset():
 
     def load_time(self, path):
         """Load the dataset time and return a list of articles. Each article is a list of words."""
-        articles = [] # list of articles
+        articles = []                                                       # list of articles
         with open(path, 'r') as f:
             tmp = []
-            for row in f: # for each row in the file
-                if row.startswith("*FIND") or row.startswith("*TEXT"): # if the row is the beginning of a new article or new query
-                    if tmp != []: # if the tmp is not empty
-                        articles.append(tmp) # append the tmp to the articles
+            for row in f:                                                   # for each row in the file
+                if row.startswith("*FIND") or row.startswith("*TEXT"):      # if the row is the beginning of a new article or new query
+                    if tmp != []:                                           # if the tmp is not empty
+                        articles.append(tmp)                                # append the tmp to the articles
                     tmp = []
-                else: # if the row is not the beginning of a new article or new query
-                    tmp += preprocess_row(row)  # preprocess the row and append it to the tmp
+                else:                                                       # if the row is not the beginning of a new article or new query
+                    tmp += preprocess_row(row)                              # preprocess the row and append it to the tmp
         return articles
     
     def load_cisi(self, path, query_path):
@@ -73,7 +73,7 @@ class Dataset():
                 doc_id = ""
                 doc_text = ""
             else:
-                doc_text += l.strip()[3:] + " " # The first 3 characters of a line can be ignored.    
+                doc_text += l.strip()[3:] + " "                            # The first 3 characters of a line can be ignored.    
 
         doc_set = [preprocess_row(doc) for doc in list(doc_set.values())]
         ### Processing QUERIES

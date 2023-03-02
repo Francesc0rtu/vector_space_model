@@ -8,33 +8,24 @@ import numpy as np
 import pickle
 import os
 from typing import Any
+import random
 
 
 
 class IRSystem():
-    """ This class represent the information retrieval system"""
-    
+    """ This class represent the information retrieval system"""  
     def __init__(self, dataset="time", load=False):
-        if load:  # load model 
-            if dataset == "time":
-                path = "MODEL/time"
-                if os.path.exists(path):
-                    self.index = pickle.load(open(path + "/index.pkl", "rb"))
-                    self.corpus = pickle.load(open(path + "/corpus.pkl", "rb"))
-                    self.query = pickle.load(open(path + "/query.pkl", "rb"))
-                    self.N = len(self.corpus)
-                else:
-                    raise FileNotFoundError("No model found")
-        else:    # create model
-            if dataset == "time":
-                self.dataset = Dataset(dataset = "time") # load dataset
-                self.corpus = self.dataset['corpus'] # get corpus
-                self.query = self.dataset['query'] # get query
 
-            
-            self.index = Index(self.corpus) # create index
-            self.index.remove_stopwords() # remove stopwords
-            self.N = len(self.corpus) # number of documents in the corpus
+        if dataset == "cisi":
+            self.dataset = Dataset(dataset = "cisi") # load dataset
+            self.corpus = self.dataset['corpus'] # get corpus
+            self.query = self.dataset['query'] # get query
+            self.rel = self.dataset['rel']
+        
+        self.index = Index(self.corpus) # create index
+        self.index.remove_stopwords() # remove stopwords
+        self.N = len(self.corpus) # number of documents in the corpus
+        self.compute_doc_vectors() # compute the vector of each document
 
     def __getitem__(self, key: str) -> Any: 
         """ This function return the index, the corpus or the query"""
@@ -44,132 +35,145 @@ class IRSystem():
             return self.corpus
         elif key == 'query':
             return self.query
+        elif key == "rel":
+            return self.rel
         else:
             raise KeyError
 
     def get_query_vector(self, query):
         """This function return the vector of a query"""
-        query = preprocess_row(query) # preprocess query, remove punctuation
+        
+        if type(query) == str: # if the query is a string
+            query = preprocess_row(query) # preprocess query, remove punctuation
+
         query_vector = np.zeros(len(self.index)) # create vector of zeros
         for term in query: # for each term in the query
             if term in self.index: # if the term is in the index
-                query_vector[self.index[term].position] = 1 # set the value of the vector to 1
+                query_vector[self.index[term].position()] = 1 # set the value of the vector to 1
 
-        
-        query_vector = query_vector/np.linalg.norm(query_vector) # normalize the vector
+        query_vector = query_vector/np.linalg.norm(query_vector, ord=1) # normalize the vector
         return query_vector
     
-    def get_doc_vectors(self):
+    def compute_doc_vectors(self):
         """ This function return the vector of each document"""
-        doc_vectors = []
+        self.doc_vectors = {}
         for docid in range(self.N):
-            doc_vectors.append(self.get_doc_vector(docid))
-        return doc_vectors
+            self.doc_vectors[docid] = self.get_doc_vector(docid)
 
     def get_doc_vector(self, docid):
         """This function return the vector of a document"""
-
         doc_vector = np.zeros(len(self.index))
         for term in self.corpus[docid]:
             if term in self.index:
-                doc_vector[self.index[term].position] = self.index.tf_idf(term, docid, self.N)
+                doc_vector[self.index[term].position()] = self.index.tf_idf(term, docid, self.N)
         # normalize
-        doc_vector = doc_vector/np.linalg.norm(doc_vector)            
+        doc_vector = doc_vector/np.linalg.norm(doc_vector, ord=1)            
         return doc_vector
-
-    
-    def get_docs_from_query(self, query, champions=False):
-        """ This function compute the vector of each document and the query vector symultaneously while iterating over the posting lists,
-        then compute the cosine similarity and return the heap of the top documents. The main idea is to avoid to compute the vector of each document, so we use the following osservation:
-        if a term is not in the query, the entry corrispoding to the term do not contribute to the socre. 
-        So we can compute only the document vectors of documents that contains at least one term of the query.
-        For this reason we iterate over the term of the query, then we iterate over the posting list of the term and we compute the vector of the document.
-        If a document is already in the dictionary of vectors, because it contains another previous term of the query, we just update the entry corresponding to the new term and
-        recompute the score. 
-        """
-
-
-        if type(query) == str: # if the query is a string
-            query = preprocess_row(query) # preprocess query, remove punctuation, get list of terms
-        elif type(query) != list: # if the query is not a string or a list
-            raise TypeError("query must be a list or a string")
-
-        vectors = {} # dictionary of vectors of documents
-        # initialize vectors 
-        query_vector = np.zeros(len(self.index)) 
-        tmp_query_vector = np.zeros(len(self.index))
-        tmp_vector_docid = np.zeros(len(self.index))
-
-        # initialize heap of top documents
-        heap = Heap() 
-        
-        for term in query: # for each term in the query
-            if term in self.index:  # if the term is in the index
-
-                # set the entry corresponding to the term in the query vector to 1
-                query_vector[self.index[term].position()] = 1 
-
-                # compute the norm of the query vector
-                norm = np.linalg.norm(query_vector) 
-
-                if norm > 0: # if the norm is greater than 0
-                    # a tmp vector is created from the query vector normalized
-                    tmp_query_vector = query_vector/np.linalg.norm(query_vector)
-                
-                champ_iter = 0
-                for docid, _ in self.index[term]: # for each document in the posting list of the term
-                    
-                    if champ_iter > (self.N/2) and champions == True:
-                        break
-                    champ_iter += 1
-
-                    if docid in vectors: # if the vector of the document already exists
-                        # set the entry corresponding to the term in the vector of the document to the tf-idf value
-                        vectors[docid][self.index[term].position()] = self.index.tf_idf(term, docid, self.N)
-                    else: # if the vector of the document does not exist
-                        # create a vector of zeros
-                        vectors[docid] = np.zeros(len(self.index))
-                        # set the entry corresponding to the term in the vector of the document to the tf-idf value
-                        vectors[docid][self.index[term].position()] = self.index.tf_idf(term, docid, self.N)
-
-                    # compute the norm of the vector of the document
-                    norm = np.linalg.norm(vectors[docid])
-
-                    if norm > 0: # if the norm is greater than 0
-                        # a tmp vector is created from the vector of the document normalized
-                        tmp_vector_docid = vectors[docid]/np.linalg.norm(vectors[docid])
-
-                    # compute the cosine similarity between the query vector and the vector of the document
-                    score = np.dot(tmp_vector_docid, tmp_query_vector)
-
-                    # add the document to the heap, update the score if the document is already in the heap
-                    heap.update(docid, score)
-       
-        return vectors, heap
-    
-                        
+                       
     def cosine_similiarity(self, query_vector, doc_vector):
+        """ This function return the cosine similarity between a two vectors"""
         return np.dot(query_vector, doc_vector)
     
-    def search(self, query, k=10):
-        """ This function return the top k documents of a query
-        """
-        vectors, heap = self.get_docs_from_query(query)
-        if k==None:
-            return heap
-        else:
-            return heap.get_top_k(k)
+    def __from_vec_to_words__(self, vec):
+        """ This function return the words from a vector"""
+        words = []
+        for i in range(len(vec)):
+            if vec[i] != 0:
+                words.append(self.index.get_term(i))
+        return words
+
+    
+    def __perform_query_optimized__(self, query, threshold = 0, k = 10):
+        query_vector = self.get_query_vector(query)
+        result = OrderedDict()
+        for term in query:
+            if term in self.index:
+                for docid, tf in self.index[term]:
+                    if docid not in result:
+                        result[docid] = (self.cosine_similiarity(query_vector, self.doc_vectors[docid]))
+                    if tf < threshold:
+                        continue
+        result = sorted(result.items(), key=lambda x: x[1], reverse=True)
+
+        return result[0:k]
+    
+    def __perform_query__(self, query_vector, k = 10):
+        result = OrderedDict()
+        for docid in range(self.N):
+            result[docid] = self.cosine_similiarity(query_vector, self.doc_vectors[docid])
+        result = sorted(result.items(), key=lambda x: x[1], reverse=True)
+        return result[0:k]
+
+    def search(self, query, k = 10):
+        return self.__perform_query_optimized__(query, k = k)
     
     def get_document_from_list(self, heap):
         """ This function return the document from a list of heap-elements"""
         documents = []
-        for heap_el in heap:
-            
-            documents.append(self.corpus[heap_el["docid"]])
-        
+        for heap_el in heap:           
+            documents.append(self.corpus[heap_el["docid"]])       
         return documents
-    
 
+    def evaluate(self, query_idx):
+        """ This function evaluate the system"""
+        query = self.query[query_idx]
+        rel = self.rel[query_idx]
+        docid = self.search(query, len(rel))
+        # docid = self.get_list_docid(heap)
+        return self.compute_precision(docid, rel)
+
+    def compute_precision(self, list1, list2):
+        count = 0
+        if len(list1) != len(list2):
+            raise Exception("List not same ")
+        for el in list1:
+            if el in set(list2):
+                count += 1
+
+        return count/len(list1)
+    
+    def evaluate_all(self):
+        """ This function evaluate the system on all the query"""
+        precision = []
+        for qid in self.rel:
+            precision.append(self.evaluate(qid))
+        sprec = sum(precision)/len(precision)
+        return sprec
+    
+    def rocchio_relevance(self, query_vector, relevant_doc, non_relevant_doc, alpha=1, beta=0.75, gamma=0.15):
+        """ This function implement the rocchio relevance feedback algorithm"""
+
+        relevant_doc_vector = np.zeros(len(self.index))
+        non_relevant_doc_vector = np.zeros(len(self.index))
+
+        for docid in relevant_doc:
+            relevant_doc_vector += self.doc_vectors[docid]
+        relevant_doc_vector = relevant_doc_vector/len(relevant_doc)
+
+        for docid in non_relevant_doc:
+            non_relevant_doc_vector += self.doc_vectors[docid]
+        non_relevant_doc_vector = non_relevant_doc_vector/len(non_relevant_doc)
+
+        new_query_vector = alpha*query_vector + beta*relevant_doc_vector - gamma*non_relevant_doc_vector
+        new_query_vector = new_query_vector/np.linalg.norm(new_query_vector, ord=1)
+        return new_query_vector
+    
+    def pseudo_relevance(self, query, k):
+        """ This function implement the pseudo relevance feedback algorithm"""
+
+        starting_docs = [doc[0] for doc in self.search(query, k)]
+
+        query_vec = self.get_query_vector(query)
+        relevant_docs = starting_docs[0:int(k/2)]
+        non_relevant_docs = starting_docs[int(k/2):k]
+        for i in range(k):
+            query_vec = self.rocchio_relevance(query_vec, relevant_docs, non_relevant_docs)
+            starting_docs = [doc[0] for doc in self.__perform_query__(query_vec, k)]
+            relevant_docs = starting_docs[0:int(k/2)]
+            non_relevant_docs = starting_docs[int(k/2):k]
+        
+        return relevant_docs
+    
 
 class Posting_list():
     """ This class represent a posting list of a term"""
@@ -224,6 +228,7 @@ class Posting_list():
         else: # if the posting is not in the posting list
             return None # return None
   
+    
 
 
 class Index():
@@ -274,6 +279,7 @@ class Index():
     
     def tf_idf(self, term: str, docid, N):
         """ This function compute the tf-idf of a term in a document"""
+
         return self.tf(term, docid)*self.idf(term)
         
     def make_index(self, corpus):
@@ -314,3 +320,5 @@ class Index():
                 print("error", i, value.position())
                 return False
         return True
+    
+    

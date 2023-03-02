@@ -1,7 +1,7 @@
 import re
 from collections import defaultdict, OrderedDict
 import math
-from src.utils import Heap, preprocess_row
+from src.utils import  preprocess_row
 from src.dataloader import Dataset
 from tqdm import tqdm
 import numpy as np
@@ -14,7 +14,7 @@ import random
 
 class IRSystem():
     """ This class represent the information retrieval system"""  
-    def __init__(self, dataset="cisi", load=False):
+    def __init__(self, dataset="cisi", file_to_load=None):
         """ This function initialize the IRSystem class.
         
         --- Parameters ---
@@ -30,16 +30,19 @@ class IRSystem():
         doc_vectors: dict, key: docid, value: vector of the document
         rel: dict, key: queryid, value: list of relevant documents
         """
-        if dataset == "cisi":
-            self.dataset = Dataset(dataset = "cisi")   # load dataset
-            self.corpus = self.dataset['corpus']       # get corpus
-            self.query = self.dataset['query']         # get query
-            self.rel = self.dataset['rel']
-        
-        self.index = Index(self.corpus)                # create index
-        self.index.remove_stopwords()                  # remove stopwords
-        self.N = len(self.corpus)                      # number of documents in the corpus
-        self.compute_doc_vectors()                     # compute the vector of each document
+        if file_to_load == None:
+            if dataset == "cisi":
+                self.dataset = Dataset(dataset = "cisi")   # load dataset
+                self.corpus = self.dataset['corpus']       # get corpus
+                self.query = self.dataset['query']         # get query
+                self.rel = self.dataset['rel']
+            
+            self.index = Index(self.corpus)                # create index
+            self.index.remove_stopwords()                  # remove stopwords
+            self.N = len(self.corpus)                      # number of documents in the corpus
+            self.compute_doc_vectors()                     # compute the vector of each document
+        else:
+            self.load(file_to_load)
 
     def __getitem__(self, key: str) -> Any: 
         """ This function return the index, the corpus or the query.
@@ -209,7 +212,6 @@ class IRSystem():
         query = self.query[query_idx]
         rel = self.rel[query_idx]
         docid = self.search(query, len(rel))
-        # docid = self.get_list_docid(heap)
         return self.compute_precision(docid, rel)
 
     def compute_precision(self, list1, list2):
@@ -299,7 +301,15 @@ class IRSystem():
         # Return the relevant documents
         return relevant_docs
     
+    def save(self, filename):
 
+        with open(filename, "wb") as f:
+            pickle.dump(self.__dict__, f)
+
+    def load(self, filename):
+        with open(filename, "rb") as f:
+            temp_dict = pickle.load(f)
+        self.__dict__.update(temp_dict) 
 class Posting_list():
     """ This class represent a posting list of a term"""
     def __init__(self, position):
@@ -446,7 +456,7 @@ class Index():
     def make_index(self, corpus):
         """ This function make the index of the corpus"""
         position = 0                                            # position of the term in t_index
-        for docid, doc in tqdm(enumerate(corpus), total=len(corpus), desc="Indexing:"):
+        for docid, doc in enumerate(tqdm(corpus, total=len(corpus), desc="Indexing:")):
             for term in doc:
                 try:                                            # if the term is already in the index
                     self._terms[term].add_posting(docid)        #update the posting list
